@@ -7,31 +7,41 @@ import { v4 as uuid } from "uuid";
 import bcrypt from 'bcrypt';
 import config from "../config/index.js";
 import jwt from "../utils/jwt.js";
+import { generateUsername } from "../utils/randomName.js";
 
 const register = async (payload) => {
     const user = validate(userValidation.register, payload);
     
     const client = await pgClient.getClient();
-
-    const usernameExists = await userRepository.findByUsername(user.username, client);
-    if(usernameExists) {
-        throw new ResponseError(409, 'Username Already Exists');
+    try {
+        const usernameExists = await userRepository.findByUsername(user.username, client);
+        if(usernameExists) {
+            throw new ResponseError(409, 'Username Already Exists');
+        }
+        const emailExists = await userRepository.findByEmail(user.email, client);
+        if(emailExists) {
+            throw new ResponseError(409, 'Email Already Exists');
+        }
+    
+        user.id = uuid();
+        user.password = await bcrypt.hash(user.password, config.bcryptSalt);
+    
+        await userRepository.create(user, client);
+    
+        const payloadJwt = {
+            id: user.id,
+            username: user.username,
+            email: user.email
+        }
+    
+        return jwt.signToken(payloadJwt)
+        
+    } catch (error) {
+        throw error
+    } finally {
+        client.release()
     }
-    const emailExists = await userRepository.findByEmail(user.email, client);
-    if(emailExists) {
-        throw new ResponseError(409, 'Email Already Exists');
-    }
 
-    user.id = uuid();
-    user.password = await bcrypt.hash(user.password, config.bcryptSalt);
-
-    await userRepository.create(user, client);
-
-    const payloadJwt = {
-        id: user.id
-    }
-
-    return jwt.signToken(payloadJwt)
 }
 
 const login = async (payload) => {
@@ -39,25 +49,67 @@ const login = async (payload) => {
 
     const client = await pgClient.getClient()
 
-    const currentUser = await userRepository.getByEmail(user.email, client);
-
-    if(!currentUser) {
-        throw new ResponseError(404, 'Email or Password is wrong')
+    try {
+        const currentUser = await userRepository.getByEmail(user.email, client);
+    
+        if(!currentUser) {
+            throw new ResponseError(404, 'Email or Password is wrong')
+        }
+    
+        const passwordValid = await bcrypt.compare(user.password, currentUser.password)
+        if (!passwordValid) {
+            throw new ResponseError(404, 'Email or Password is wrong')
+        }
+    
+        const payloadJwt = {
+            id: currentUser.id,
+            username: currentUser.username,
+            email: currentUser.email
+        }
+    
+        return jwt.signToken(payloadJwt)
+        
+    } catch (error) {
+        throw error
+    } finally {
+        client.release()
     }
 
-    const passwordValid = await bcrypt.compare(user.password, currentUser.password)
-    if (!passwordValid) {
-        throw new ResponseError(404, 'Email or Password is wrong')
-    }
+}
 
-    const payloadJwt = {
-        id: currentUser.id
-    }
+const loginGoogle = async (payload) => {
+    const client = await pgClient.getClient()
 
-    return jwt.signToken(payloadJwt)
+    try {
+        const currentUser = await userRepository.getByEmail(payload.data.email, client);
+        if(!currentUser) {
+            const id = uuid();
+            await userRepository.createByGoogle({id, username: `${generateUsername(payload.data.given_name)}` ,email: payload.data.email}, client)
+
+            const payloadJwt = {
+                id: id,
+                username: payload.data.given_name,
+                email: payload.data.email
+            }
+            return jwt.signToken(payloadJwt)
+        } else {
+            const payloadJwt = {
+                id: currentUser.id,
+                username: currentUser.username,
+                email: currentUser.email
+            }
+            return jwt.signToken(payloadJwt)
+        }
+
+    } catch (error) {
+        throw error
+    } finally {
+        client.release()
+    }
 }
 
 export default {
     register,
-    login
+    login,
+    loginGoogle
 }

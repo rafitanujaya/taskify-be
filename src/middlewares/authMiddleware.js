@@ -2,7 +2,7 @@ import jwt from "../utils/jwt.js";
 
 const authMiddleware = async (req, res, next) => {
     const { authorization  } = req.headers;
-    console.warn(`Authorization : ${authorization}`);
+    // console.warn(`Authorization : ${authorization}`);
 
     if(!authorization.startsWith('Bearer ')) {
         res.status(401).json({

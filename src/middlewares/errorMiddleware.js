@@ -1,6 +1,7 @@
 import ResponseError from "../exceptions/responseError.js";
 
 const errorMiddleware = async (err, req, res, next) => {
+    console.log(err);
     console.warn(`Error: ${err}`);
 
     if(err instanceof ResponseError) {

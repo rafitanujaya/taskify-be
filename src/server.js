@@ -1,9 +1,16 @@
+import { Server } from 'socket.io';
+import http from "http";
 import createApp from './app.js';
 import config from './config/index.js';
+import initAiHanlder from './socket/handlers/aiHandler.js';
 
 const app = createApp();
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: "*" } });
 
-const server = app.listen(config.port, () => {
+initAiHanlder(io);
+
+server.listen(config.port, () => {
     console.info(`Server running on port : localhost:${config.port}`);
     console.info(`Environment : ${config.env}`);
 })

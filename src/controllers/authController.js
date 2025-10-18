@@ -1,4 +1,8 @@
+import { google } from "googleapis";
+import googleClient from "../config/googleClient.js";
 import authService from "../services/authService.js";
+import ResponseError from "../exceptions/responseError.js";
+import config from "../config/index.js";
 
 const register = async (req, res, next) => {
     try {
@@ -43,8 +47,44 @@ const verify = async (req, res, next) => {
     }
 }
 
+const loginGoogle = async (req, res, next) => {
+    try {
+        res.redirect(googleClient.authorizationUrl)
+    } catch (error) {
+        next(error)
+    }
+}
+
+const loginGoogleCb = async (req, res, next) => {
+    try {
+        const {code} = req.query
+        const {tokens} = await googleClient.oauth2Client.getToken(code)
+
+        googleClient.oauth2Client.setCredentials(tokens)
+
+        const oauth2 = google.oauth2({
+            version: 'v2',
+            auth: googleClient.oauth2Client
+        })
+
+        const data = await oauth2.userinfo.get();
+
+        if(!data) {
+            throw new ResponseError(500, 'kesalahan server hehe')
+        }
+
+        const tokenJwt = await authService.loginGoogle(data);
+
+        res.redirect(`${config.frontendRedirectUrl}?token=${tokenJwt}`)
+    } catch (error) {
+        next(error)
+    }
+}
+
 export default {
     register,
     login,
-    verify
+    verify,
+    loginGoogle,
+    loginGoogleCb
 }
